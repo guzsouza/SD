@@ -1,0 +1,121 @@
+version: '3'
+services:
+  node1:
+    build:
+      context: ./node
+    container_name: node1
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./node:/app
+    environment:
+      - NODE_ID=1
+
+  node2:
+    build:
+      context: ./node
+    container_name: node2
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./node:/app
+    environment:
+      - NODE_ID=2
+
+  node3:
+    build:
+      context: ./node
+    container_name: node3
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./node:/app
+    environment:
+      - NODE_ID=3
+
+  node4:
+    build:
+      context: ./node
+    container_name: node4
+    ports:
+      - "5003:5000"
+    volumes:
+      - ./node:/app
+    environment:
+      - NODE_ID=4
+
+  node5:
+    build:
+      context: ./node
+    container_name: node5
+    ports:
+      - "5004:5000"
+    volumes:
+      - ./node:/app
+    environment:
+      - NODE_ID=5
+
+  client1:
+    build:
+      context: ./client
+    container_name: client1
+    ports:
+      - "5005:5000"
+    volumes:
+      - ./client:/app
+    environment:
+      - CLIENT_ID=1
+      - NODE_URL=http://node1:5000
+    command: ["python", "client.py"]
+
+  client2:
+    build:
+      context: ./client
+    container_name: client2
+    ports:
+      - "5006:5000"
+    volumes:
+      - ./client:/app
+    environment:
+      - CLIENT_ID=2
+      - NODE_URL=http://node2:5000
+    command: ["python", "client.py"]
+
+  client3:
+    build:
+      context: ./client
+    container_name: client3
+    ports:
+      - "5007:5000"
+    volumes:
+      - ./client:/app
+    environment:
+      - CLIENT_ID=3
+      - NODE_URL=http://node3:5000
+    command: ["python", "client.py"]
+
+  client4:
+    build:
+      context: ./client
+    container_name: client4
+    ports:
+      - "5008:5000"
+    volumes:
+      - ./client:/app
+    environment:
+      - CLIENT_ID=4
+      - NODE_URL=http://node4:5000
+    command: ["python", "client.py"]
+
+  client5:
+    build:
+      context: ./client
+    container_name: client5
+    ports:
+      - "5009:5000"
+    volumes:
+      - ./client:/app
+    environment:
+      - CLIENT_ID=5
+      - NODE_URL=http://node5:5000
+    command: ["python", "client.py"]
