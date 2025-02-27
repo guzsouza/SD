@@ -5,6 +5,7 @@ import threading
 import requests
 from flask import Flask, request, jsonify
 import logging
+import os
 
 # Desabilitar logs do urllib3
 logging.getLogger('urllib3').setLevel(logging.WARNING)
@@ -19,16 +20,35 @@ node_id = int(os.getenv('NODE_ID', 1))
 nodes = [f'http://node{i}:5000' for i in range(1, 6) if i != node_id]
 
 
+
+
 # Variáveis de controle
 timestamp = 999999999
 number_of_ok = 0
-in_critical_section = False
+critical_zone_target = False
 request_queue = []
+name_arq = f'estado{node_id}.bin'
+
+
+
+#Iniciliza o estado da variável de controle como 0
+def initial_state():
+    with open(f'{name_arq}', 'wb') as file:
+        file.write(b'\x00') 
+    
+    print(f"Estado inicial do nó {node_id} foi inicializado como 0", flush=True)
+
+# def critical_zone_read():
+#     global node_id, name_arq
+
+#     if os.path.exists(f'{name_arq}'):
+#         with open(f'{name_arq}', 'r') as file:
+#             estado = file.read().strip()
+#             return estado == 'False'  # Retorna True ou False baseado no arquivo
+#     else:
+#         return False  # Se o arquivo não existe, considera False como estado inicial
 
 def verify_next_request(request_id):
-    
-    print("Verificando se o nó pode entrar na área crítica. (verify)", flush=True)
-    
     global number_of_ok 
     global timestamp
     global node_id
@@ -36,30 +56,29 @@ def verify_next_request(request_id):
     global nodes
     
     create_new_timestamp()
-    
-    print("timestamp criado", flush=True)
-    
+
     if not critical_section_active_status():
-        print("Nenhum nó está na área crítica. Verificando filas de requisições.", flush=True)
+        
+        
         valid_queue_nodes = are_request_queues_not_empty()
-        print(f"valid queue nodes {valid_queue_nodes}.", flush=True)
-        if not valid_queue_nodes:
+        
+        print(f"Finalizando verificação de filas de requisições, número de nós com filas não vazias {len(valid_queue_nodes)}", flush=True)
+        
+        if not valid_queue_nodes: 
             if request_queue:
-                print(f"Todos os ok's foram recebidos, pois, não há filas não vazias além do nó {node_id}. Entrando na área crítica!", flush=True)
+                print(f"Fila do nó {node_id} possui requisições, fila atual: {request_queue}", flush=True)  
                 if not critical_section_active_status():
-                    enter_critical_section()
+                    print(f"Alerta>>> Nó {node_id} prestes a entrar na zona crítica! Variável de controle {critical_zone_target}", flush=True)  
+                    enter_critical_section(request_id)
                 else:
                     print("Zona crítica ocupada", flush=True)
                     time.sleep(0.2)
                     verify_next_request(request_id)
             else:
                 print("Nenhuma requisição em fila.", flush=True)
-        else:
-            
+        else:    
             print("Fila não vazia encontrada.", flush=True)
-            
             number_of_ok = len(nodes) - len(valid_queue_nodes)
-            
             print("Verificando o próximo nó. (com 5 ok's)", flush=True)
         
             for current_node in valid_queue_nodes:
@@ -81,7 +100,7 @@ def verify_next_request(request_id):
                 print("Todos os ok's foram recebidos, entrando na área crítica!", flush=True)
                 if not critical_section_active_status():
                     print("Nenhum nó está na área crítica", flush=True)
-                    enter_critical_section()
+                    enter_critical_section(request_id)
                 else:
                     print("Zona crítica ocupada", flush=True)
                     time.sleep(0.2)
@@ -89,19 +108,16 @@ def verify_next_request(request_id):
                     
                     
                 
-@app.route('/ok/<int:other_id>', methods=['PATCH'])
-def ok(other_id):
-    """Recebe OK de outro nó."""
-    global number_of_ok, node_id
-    number_of_ok += 1
-    print(f"O nó {other_id} enviou um ok para o nó {node_id}. Número de OKs: {number_of_ok}", flush=True)
+# @app.route('/ok/<int:other_id>', methods=['PATCH'])
+# def ok(other_id):
+#     """Recebe OK de outro nó."""
+#     global number_of_ok, node_id
+#     number_of_ok += 1
+#     print(f"O nó {other_id} enviou um ok para o nó {node_id}. Número de OKs: {number_of_ok}", flush=True)
 
 @app.route('/get_request_queue', methods=['GET'])
 def get_request_queue():
     """Retorna a fila de requisições do nó especificado.""" 
-    
-    print("DEBUGGING Obtendo fila de requisições.", flush=True)
-    
     global request_queue
     
     try:
@@ -116,7 +132,6 @@ def are_request_queues_not_empty():
     
     
     """Verifica se as filas de requisições de todos os nós estão vazias."""
-    not_empty = False
     nodes_not_empty = []
     
     for node in nodes:
@@ -125,33 +140,30 @@ def are_request_queues_not_empty():
             response = requests.get(url)
             if response.status_code == 200:
                 data = response.json()
+                print(f"Fila de requisições do nó {node}: {data['request_queue']}")
                 if data['request_queue']:
                     print(f"A fila de requisições do nó {node} não está vazia.")
-                    not_empty = True
                     nodes_not_empty.append(node)
             else:
                 print(f"Falha ao acessar e verificar internamente a fila do nó {node}.")
-                return False
         except requests.exceptions.RequestException as e:
             print(f"Falha ao obter dados de {node}: {e}", flush=True)
-            return False
     
-    if not_empty:
-        return nodes_not_empty
-    return False
+    
+    return nodes_not_empty
 
 
 @app.route('/get_data', methods=['GET'])
 def get_node_data():
     
-    global node_id, number_of_ok, in_critical_section, request_queue
+    global node_id, number_of_ok, critical_zone_target, request_queue
     
     """Retorna os dados do nó especificado.""" 
     try:
         return jsonify({
             'node_id': node_id,
             'number_of_ok': number_of_ok,
-            'in_critical_section': in_critical_section,
+            'critical_zone_target': critical_zone_target,
             'request_queue': request_queue,
         }), 200
 
@@ -161,17 +173,18 @@ def get_node_data():
         return jsonify({"error": "Erro inesperado: " + str(e)}), 500
 
 
-@app.route('/get_node_status', methods=['GET'])
-def get_node_status():
-    
-    global in_critical_section
-    
-    """Retorna o status do nó especificado."""
+@app.route('/patch_list_of_zone/<int:other_id>/<int:enter_or_leave>', methods=['PATCH'])
+def patch_list_of_zone(other_id, enter_or_leave):
+    global critical_zone_target
+    """Atualiza a lista de controle de alertas de zona crítica."""
     try:
+        if enter_or_leave == 1:
+            critical_zone_target = True
+        elif enter_or_leave == 0:
+            critical_zone_target = False
         return jsonify({
-            'in_critical_section': in_critical_section,
+            'critical_zone_target': critical_zone_target,
         }), 200
-
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 404
     except Exception as e:
@@ -180,56 +193,20 @@ def get_node_status():
 
 def critical_section_active_status():
     """Verifica se algum nó está na seção crítica, com rechecagem."""
-    global in_critical_section, nodes
-
-    #print("Verificando status da seção crítica...", flush=True)
-
-    # Se o próprio nó está na seção crítica, retorna True
-    if in_critical_section:
-        return True
-
-    for node in nodes:
-        url = f'{node}/get_node_status'
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                #print(f"Status do nó {node}: {data}", flush=True)
-                node_critical_status = data.get('in_critical_section')
-                
-                # Se encontrar um nó que já está na área crítica, retorna True
-                if node_critical_status == True:
-                    #print(f"O nó {node} está na área crítica.", flush=True)
-                    return True
-        except requests.exceptions.RequestException as e:
-            print(f"Erro ao verificar {node}: {e}", flush=True)
+    global critical_zone_target
     
-
-    # Rechecagem após um pequeno delay para evitar falsos negativos
-    time.sleep(0.2)
-    for node in nodes:
-        url = f'{node}/get_node_status'
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                #print(f"Status do nó {node}: {data}", flush=True)
-                node_critical_status = data.get('in_critical_section')
-                
-                # Se encontrar um nó que já está na área crítica, retorna True
-                if node_critical_status == True:
-                    #print(f"O nó {node} está na área crítica.", flush=True)
-                    return True
-        except requests.exceptions.RequestException:
-            pass  # Se falhar na segunda tentativa, assume que o nó está inacessível
-
+    if critical_zone_target:
+        return True
+    
+    time.sleep(0.2) 
+    
+    if critical_zone_target:
+        return True
+    
     return False
 
 
 def create_new_timestamp():
-    
-    print("Criando novo timestamp.", flush=True)
-    
     """Envia o número aleatório para os outros nós para negociação de acesso."""
     global timestamp
     global node_id
@@ -250,51 +227,66 @@ def compare_timestamps(other_timestamp, other_id):
 
 def enter_critical_section(request_id):
     """Entra na seção crítica quando todos os OKs foram recebidos."""
-    global in_critical_section
+    global critical_zone_target
     global request_queue
     
-    in_critical_section = True
+    
+    # Atualiza a lista de alertas de zona crítica, inserindo o nó na zona
+    if not critical_section_active_status():
+        critical_zone_target = True
+        for current_node in nodes:
+            
+            url = f'{current_node}/patch_list_of_zone/{node_id}/1'
+            try:
+                requests.patch(url, json={'node_id': node_id, 'enter_or_leave': 1})
+            except requests.exceptions.RequestException as e:
+                print(f"Falha ao enviar alerta para {current_node}: {e}", flush=True)
         
- 
-    print(f"Nó {node_id} está na área crítica!", flush=True)
-    request_queue.pop(0)
+    
+    print(f"Nó {node_id} está na zona crítica! Variável de controle {critical_zone_target}", flush=True)
+    print(f"Nó {node_id} está executando a requisição do cliente {request_queue[0]}", flush=True)
     time.sleep(random.uniform(0.2, 1.0))  # Simula uso do recurso
-    print(f"Nó {node_id} executou a requisição do nó {request_id} e terminou de usar o recurso.", flush=True)
+    request_queue.pop(0)
     
     exit_critical_section(request_id)
 
 def exit_critical_section(request_id):
     """Sai da seção crítica e verifica se todos os nós acessaram a área crítica."""
-    global in_critical_section, number_of_ok, request_queue
+    global critical_zone_target, number_of_ok, request_queue
 
-    if request_queue:
-        client_id = request_id  # Obtém o ID do cliente
+    
+    #client_id = request_id  # Obtém o ID do cliente
 
-        if client_id:
-            client_url = f'http://client{client_id}:5000/receive_committed'
-            try:
-                requests.post(client_url)
-                print(f"Notificado o cliente {client_id} sobre o COMMITTED.", flush=True)
-            except requests.exceptions.RequestException as e:
-                print(f"Falha ao notificar o cliente {client_id}: {e}", flush=True)
-        else:
-            print("Nenhum cliente encontrado para notificar sobre o COMMITTED.", flush=True)
+    # if client_id:
+    #     client_url = f'http://client{client_id}:5000/receive_committed'
+    #     try:
+    #         requests.post(client_url)
+    #         print(f"Notificado o cliente {client_id} sobre o COMMITTED.", flush=True)
+    #     except requests.exceptions.RequestException as e:
+    #         print(f"Falha ao notificar o cliente {client_id}: {e}", flush=True)
+    # else:
+    #     print("Nenhum cliente encontrado para notificar sobre o COMMITTED.", flush=True)
 
-    in_critical_section = False
+    # Atualiza a lista de alertas de zona crítica, retirando o nó da zona
+    critical_zone_target = False
+    for current_node in nodes:
+        url = f'{current_node}/patch_list_of_zone/{node_id}/0'
+        try:
+            requests.patch(url, json={'node_id': node_id, 'enter_or_leave': 0})
+        except requests.exceptions.RequestException as e:
+            print(f"Falha ao enviar alerta para {current_node}: {e}", flush=True)
+            
     number_of_ok = 0
 
     print(f"Nó {node_id} saiu da área crítica.", flush=True)
 
-    # Notifica outros nós que saiu da seção crítica
-    for node in nodes:
-        url = f'{node}/ok/{node_id}'
-        try:
-            requests.patch(url, json={'node_id': node_id})
-        except requests.exceptions.RequestException as e:
-            print(f"Falha ao enviar OK para {node}: {e}", flush=True)
-
-    if request_queue:
-        verify_next_request(request_queue[0])
+    # # Notifica outros nós que saiu da seção crítica
+    # for node in nodes:
+    #     url = f'{node}/ok/{node_id}'
+    #     try:
+    #         requests.patch(url, json={'node_id': node_id})
+    #     except requests.exceptions.RequestException as e:
+    #         print(f"Falha ao enviar OK para {node}: {e}", flush=True)
             
 
 @app.route('/request_access', methods=['POST'])
@@ -302,6 +294,8 @@ def request_access():
     """Recebe requisição de um cliente para acessar o recurso."""
     global request_queue
     global node_id
+    
+    initial_state()
     
     client_data = request.get_json()
     client_id = client_data.get('client_id')

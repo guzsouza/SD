@@ -49,4 +49,5 @@ if __name__ == '__main__':
     
     for _ in range(random.randint(5, 10)):  # Solicita entre 10 e 50 acessos
         print(f"Cliente {client_id} solicitando acesso ao recurso.", flush=True)
+        time.sleep(1.0)
         response = request_access()
