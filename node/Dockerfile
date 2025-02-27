@@ -17,4 +17,4 @@ COPY . /app
 EXPOSE 5000
 
 # Comando para rodar a aplicação com Gunicorn
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "node:app"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "node:app", "--log-level", "debug"]

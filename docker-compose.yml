@@ -1,5 +1,7 @@
 version: '3'
 services:
+  
+
   node1:
     build:
       context: ./node
@@ -56,6 +58,12 @@ services:
       - NODE_ID=5
 
   client1:
+    depends_on:
+        - node1
+        - node2
+        - node3
+        - node4
+        - node5
     build:
       context: ./client
     container_name: client1
@@ -69,6 +77,13 @@ services:
     command: ["python", "client.py"]
 
   client2:
+    depends_on:
+        - node1
+        - node2
+        - node3
+        - node4
+        - node5
+        - client1
     build:
       context: ./client
     container_name: client2
@@ -82,6 +97,14 @@ services:
     command: ["python", "client.py"]
 
   client3:
+    depends_on:
+        - node1
+        - node2
+        - node3
+        - node4
+        - node5
+        - client1
+        - client2
     build:
       context: ./client
     container_name: client3
@@ -94,7 +117,16 @@ services:
       - NODE_URL=http://node3:5000
     command: ["python", "client.py"]
 
-  client4:
+  client4: 
+    depends_on:
+        - node1
+        - node2
+        - node3
+        - node4
+        - node5
+        - client1
+        - client2
+        - client3
     build:
       context: ./client
     container_name: client4
@@ -108,6 +140,16 @@ services:
     command: ["python", "client.py"]
 
   client5:
+    depends_on:
+        - node1
+        - node2
+        - node3
+        - node4
+        - node5
+        - client1
+        - client2
+        - client3
+        - client4
     build:
       context: ./client
     container_name: client5
