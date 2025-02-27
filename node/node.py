@@ -95,7 +95,6 @@ def ok(other_id):
     global number_of_ok, node_id
     number_of_ok += 1
     print(f"O nó {other_id} enviou um ok para o nó {node_id}. Número de OKs: {number_of_ok}", flush=True)
-    verify_next_request()
 
 @app.route('/get_request_queue', methods=['GET'])
 def get_request_queue():
